@@ -1,0 +1,10 @@
+*.h5
+data/*
+.vscode
+.ipynb*
+__pychche
+logs
+temp
+pypcd
+**.pyc
+Untitled*
