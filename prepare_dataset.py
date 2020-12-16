@@ -5,6 +5,8 @@ import pandas as pd
 import os
 import math
 from config import *
+from timeit import timeit
+from multiprocessing import Pool
 
 from sustechscapes_dataset  import SustechScapesDataset
 
@@ -17,12 +19,12 @@ def cloud_to_pillars(points, dx, dy, min_pts):
     #points = front_points
 
     # grid coordinates
-    grid_coord_raw = points[:,0:2]/np.array([dx,dy]).reshape([-1,2])
+    grid_coord_raw = points[:,0:2]/np.array([dx,dy]) #.reshape([-1,2])
     grid_coord = np.round(grid_coord_raw)  # np.round, the grid_coord are in the center of the pillar.
 
     # attach grid coord to all points
     grid_data = np.concatenate([points,grid_coord], axis=-1)
-    grid_data
+    #grid_data
 
     def do_sample(points, min_pts):
         points_coord = points[:,0:3]
@@ -109,6 +111,9 @@ def build_gt(labels, dx, dy, img_dim):
     ## heatmap, [H, W, Cls] in paper, but let's try [H,W,1]
     obj_ind = np.zeros((H,W,1))
     obj_heatmap = np.zeros((H,W,kitti_cls_num))
+    obj_z = np.zeros((H,W,1))
+    obj_size =  np.zeros((H,W,3))
+    obj_angle = np.zeros((H,W,2))
     
     for idx in range (box_img_coord.shape[0]):
         
@@ -116,6 +121,9 @@ def build_gt(labels, dx, dy, img_dim):
 
         if x >=0 and x < Ｈ and y >=0 and y < W:
             obj_ind[x,y]=1.0
+            obj_z[x,y] = labels[idx, 2]
+            obj_size[x,y] =  labels[idx, 3:6]
+            obj_angle[x,y] = [math.cos(labels[idx, 8]), math.sin(labels[idx, 8])]
 
         channel_ind = int(labels[idx, 9])
         # note: in centernet, the \sigma is adaptive according to actual object size
@@ -123,37 +131,6 @@ def build_gt(labels, dx, dy, img_dim):
         for i in range(obj_heatmap.shape[0]):
             for j in range(obj_heatmap.shape[1]):
                 obj_heatmap[i,j, channel_ind] = max(obj_heatmap[i,j, channel_ind], math.exp(-((x-i)*(x-i) + (y-j)*(y-j))/2.0))  # gaussian kernel
-        # if x >=0 and x < Ｈ and y >=0 and y < W:
-        #     obj_ind[x,y]=1.0
-        #     obj_heatmap[x,y]=1.0
-            
-        #     non_center=0.8
-        #     if y+1 < W: 
-        #         obj_heatmap[x,y+1]=non_center
-        #         obj_heatmap[x,y-1]=non_center
-
-        #     if x+1 < H:
-        #         if y+1 < W:
-        #             obj_heatmap[x+1,y+1]=non_center
-                
-        #         obj_heatmap[x+1,y  ]=non_center
-
-        #         if y-1 > 0:
-        #             obj_heatmap[x+1,y-1]=non_center
-
-        #     if x-1 > 0:
-        #         obj_heatmap[x-1,y  ]=non_center
-
-        #         if y+1 < W:
-        #             obj_heatmap[x-1,y+1]=non_center
-        #         if y-1 > 0:
-        #             obj_heatmap[x-1,y-1]=non_center
-
-        # else:
-        #     print(x,y, "out of range")
-
-    
-    
 
     ## offset
     ## we need to set offset for all pixels around the object position
@@ -178,6 +155,7 @@ def build_gt(labels, dx, dy, img_dim):
                 if px >=0 and px < Ｈ and py >=0 and py < W:
                     obj_offset[px, py] = offset[idx,:] + np.array([px-x, py-y])
         
+    # z coord
 
     # grid_coord_raw = points[:,0:2]/np.array([dx,dy]).reshape([-1,2])
     # grid_coord = np.round(grid_coord_raw)
@@ -189,52 +167,55 @@ def build_gt(labels, dx, dy, img_dim):
     # input_dim =  tf.keras.Input(shape=(H, W, num_classes*3))
     # input_orientation = tf.keras.Input(shape=(H, W, num_classes*8))
 
-    return np.concatenate([obj_ind, obj_heatmap, obj_offset], axis=-1)
+    return np.concatenate([obj_ind, obj_heatmap, obj_offset, obj_z, obj_size, obj_angle], axis=-1)
     #return np.concatenate([obj_heatmap, obj_offset], axis=-1)
 
 
+def build_pillar_image(d,f,save_path):    
+        print(f)
+        #print("crop", timeit(lambda : d.crop_points_in_camera_view("kitti",f, "front"), number=10))
 
-def prepare_raw_data():
+        front_points  = d.crop_points_in_camera_view("kitti",f, "front")
+    
+        #print("pillorize", timeit(lambda : cloud_to_pillars(front_points, dx, dy, min_pts), number=10))
+        pillars,coord = cloud_to_pillars(front_points, dx, dy, min_pts)
+        
+        #print("toimage", timeit(lambda : pillars_to_image(pillars, coord, dx, dy, img_dim), number=10))
+        img = pillars_to_image(pillars, coord, dx, dy, img_dim)
+        print(img.mean())
+        img.tofile(os.path.join(save_path, "pillars", f))
+
+
+def build_gt_file(d,f,save_path):
+    print(f)
+    # save it to file
+    #np.save(save_path+"/"+f, img)
+    label = d.load_label("kitti", f)
+    #print("lable num", len(label), list(map(lambda l: l["obj_type"], label)))
+
+    label_nparray = d.label_to_nparray(label, kitti_cls_index_map)
+
+    
+    #labels = label_nparray.reshape((-1,10))  # last ele is typeindex
+    gt = build_gt(label_nparray, dx, dy, img_dim)
+    #print(gt.shape, np.mean(gt,axis=(0,1)), np.sum(gt[:,:,0]))
+
+    # save img,heatmap,offset, for later training and testing
+    #print(label)
+    
+    gt.tofile(os.path.join(save_path, "gt", f))
+    return gt
+
+
+def prepare_raw_data(func):
     sustechscapes_root_dir = "/home/lie/fast/code/SUSTechPoints-be/data"
     save_path = "./data/kitti"
 
     d = SustechScapesDataset(sustechscapes_root_dir, ["kitti"])
     scene = d.get_scene("kitti")
     
-    def proc_one_frame(f):    
-        front_points  = d.crop_points_in_camera_view("kitti",f, "front")    
-    
-        pillars,coord = cloud_to_pillars(front_points, dx, dy, min_pts)
-        
-        img = pillars_to_image(pillars, coord, dx, dy, img_dim)
-        print(img.mean())
-        # save it to file
-        #np.save(save_path+"/"+f, img)
-        label = d.load_label("kitti", f)
-        print("lable num", len(label), list(map(lambda l: l["obj_type"], label)))
-
-        label_nparray = d.label_to_nparray(label, kitti_cls_index_map)
-
-        
-        #labels = label_nparray.reshape((-1,10))  # last ele is typeindex
-        gt = build_gt(label_nparray, dx, dy, img_dim)
-        print(gt.shape, np.mean(gt,axis=(0,1)), np.sum(gt[:,:,0]))
-
-        # save img,heatmap,offset, for later training and testing
-        #print(label)
-        img.tofile(os.path.join(save_path, "pillars", f))
-        gt.tofile(os.path.join(save_path, "gt", f))
-        return img, gt
-
-    imgs = []
-    gts = []
     for f in scene["frames"]:
-        print(f)
-        img,gt=proc_one_frame(f)
-        imgs.append(img)
-        gts.append(gt)
-        
-    return imgs, gts
+        func(d,f,save_path)
 
 def test():
     points = np.array([
@@ -253,7 +234,7 @@ def test():
 
 
 if __name__ == "__main__":
-    prepare_raw_data()
+    prepare_raw_data(build_gt_file)
 
     #test()
 

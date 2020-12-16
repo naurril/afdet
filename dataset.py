@@ -25,7 +25,7 @@ def get_dataset():
         pillar_image = pillar_image[:,:,:,3:]
         #print(np.mean(pillar_image), np.max(pillar_image), np.min(pillar_image))
         gt = np.fromfile(os.path.join(data_path, "gt", f))
-        gt = np.reshape(gt, [H,W,4])
+        gt = np.reshape(gt, [H,W,CLASS_NUM+9]) #ind, heatmap, offset, z, size, angle
 
         return pillar_image, gt
 
@@ -33,7 +33,7 @@ def get_dataset():
         [pillar_image, gt] = tf.py_function(load_frame, [idx], [tf.float32, tf.float32])
         
         pillar_image.set_shape([H,W,P,D-3])
-        gt.set_shape([H,W,4])
+        gt.set_shape([H,W,CLASS_NUM+9])
 
         return pillar_image, gt
 
@@ -41,3 +41,8 @@ def get_dataset():
     eval_data = eval_data.map(tf_load_frame)
 
     return train_data, eval_data
+
+
+if __name__ == "__main__":
+    train,eval = get_dataset()
+

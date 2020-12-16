@@ -1,5 +1,5 @@
 import tensorflow as tf
-import cfg
+import config
 
 
 def conv2d(x, filters, kernel_size, strides, is_training=True):
@@ -36,8 +36,7 @@ def backbone(x, is_training):
     x = tf.concat([phase1, x], axis=-1, name="bakcbone_end")
     return x
 
-
-def get_header(input, num_classes, is_training):
+def get_multiple_headers(input, num_classes, is_training):
     # cannot find description of the hotmap header
     # b, h, w, d
     x = input
@@ -56,25 +55,30 @@ def get_header(input, num_classes, is_training):
     x = tf.keras.layers.Conv2D(2, (1,1), strides=(1,1), padding='same', data_format='channels_last')(x)
     offset = x
 
-    # x = input
-    # x = conv2d(x, 64, (1,1),(1,1), is_training)
-    # x = conv2d(x, 32, (1,1),(1,1), is_training)
-    # x = conv2d(x, num_classes, (1,1),(1,1), is_training)    
-    # z_value = x
+    x = input
+    #x = tf.keras.layers.Conv2D(64, (3,3), strides=(1,1), padding='same', data_format='channels_last')(x)
+    x = tf.keras.layers.Conv2D(32, (3,3), strides=(1,1), padding='same', data_format='channels_last')(x)
+    x = tf.keras.layers.Conv2D(1, (1,1), strides=(1,1), padding='same', data_format='channels_last')(x)
+    z = x
 
-    # x = input
-    # x = conv2d(x, 64, (1,1),(1,1), is_training)
-    # x = conv2d(x, 32, (1,1),(1,1), is_training)
-    # x = conv2d(x, num_classes*3, (1,1),(1,1), is_training)
-    # dim = x
+    x = input
+    #x = tf.keras.layers.Conv2D(64, (3,3), strides=(1,1), padding='same', data_format='channels_last')(x)
+    x = tf.keras.layers.Conv2D(32, (3,3), strides=(1,1), padding='same', data_format='channels_last')(x)
+    x = tf.keras.layers.Conv2D(3, (1,1), strides=(1,1), padding='same', data_format='channels_last')(x)
+    size = x
 
-    # x = input
-    # x = conv2d(x, 64, (1,1),(1,1), is_training)
-    # x = conv2d(x, 32, (1,1),(1,1), is_training)
-    # x = conv2d(x, num_classes*8, (1,1),(1,1), is_training)
-    # orientation = x
-    
-    return tf.concat([heatmap, offset], axis=-1)
+    x = input
+    #x = tf.keras.layers.Conv2D(64, (3,3), strides=(1,1), padding='same', data_format='channels_last')(x)
+    x = tf.keras.layers.Conv2D(32, (3,3), strides=(1,1), padding='same', data_format='channels_last')(x)
+    x = tf.keras.layers.Conv2D(2, (1,1), strides=(1,1), padding='same', data_format='channels_last')(x)
+    angle = x
+
+    return heatmap, offset, z, size, angle
+
+def get_header(input, num_classes, is_training):
+   
+    heatmap, offset, z, size, angle = get_multiple_headers(input, num_classes, is_training)
+    return tf.concat([heatmap, offset, z, size, angle], axis=-1)
 
 
 
@@ -92,18 +96,17 @@ def heatmap_loss(y_gt, y_pred, y_ind):
         tf.math.pow(1-y_pred, alpha) * tf.math.log(y_pred),
         tf.math.pow(1-y_gt, beta) * tf.math.pow(y_pred, alpha) * tf.math.log(-y_pred+1))
     
-    sum = tf.reduce_mean(ele_loss, axis=[1,2,3])
+    sum = tf.reduce_sum(ele_loss, axis=[1,2,3])
     
     loss = -sum/(norm+1)
     #loss = -sum
     loss = tf.reduce_mean(loss)
     return loss
 def offset_loss(y_gt, y_pred):
-
     y_ind = tf.where(y_gt!=0.0, 1.0, 0.0)
-    return index_regressoin_l1_loss(y_gt, y_pred, y_ind)
+    return index_masked_regressoin_l1_loss(y_gt, y_pred, y_ind)
 
-def index_regressoin_l1_loss(y_gt, y_pred, y_ind):
+def index_masked_regressoin_l1_loss(y_gt, y_pred, y_ind):
     # backprop only positions where object exists, 
     # so we need to input a index parameter, can we do it in tf.keras?
     # we use gt!= 0.0 as the index, note this is not precise.
@@ -158,23 +161,40 @@ def orientation_regression_loss(y_gt, y_pred, y_ind):
 
 class TfnetLoss(tf.keras.losses.Loss):
     def call(self, y_true, y_pred):
+        print(y_true.shape, y_pred.shape)
         input_obj_ind = y_true[:,:,:,0:1]
-        input_heatmap = y_true[:,:,:,1:(cfg.CLASS_NUM+1)]
-        input_offset  = y_true[:,:,:,(cfg.CLASS_NUM+1):(cfg.CLASS_NUM+1+2)]
+        input_heatmap = y_true[:,:,:,1:(config.CLASS_NUM+1)]
+        input_offset  = y_true[:,:,:,(config.CLASS_NUM+1):(config.CLASS_NUM+3)]
+        input_z = y_true[:,:,:,(config.CLASS_NUM+3):(config.CLASS_NUM+4)]
+        input_size = y_true[:,:,:,(config.CLASS_NUM+4):(config.CLASS_NUM+7)]
+        input_angle = y_true[:,:,:,(config.CLASS_NUM+7):(config.CLASS_NUM+9)]
 
-        heatmap = y_pred[:,:,:,0:cfg.CLASS_NUM]
-        offset  = y_pred[:,:,:,cfg.CLASS_NUM:(cfg.CLASS_NUM+2)]
+        pred_heatmap = y_pred[:,:,:,0:config.CLASS_NUM]
+        pred_offset  = y_pred[:,:,:,config.CLASS_NUM:(config.CLASS_NUM+2)]
+        pred_z  = y_pred[:,:,:,(config.CLASS_NUM+2):(config.CLASS_NUM+3)]
+        pred_size  = y_pred[:,:,:,(config.CLASS_NUM+3):(config.CLASS_NUM+6)]
+        pred_angle  = y_pred[:,:,:,(config.CLASS_NUM+6):(config.CLASS_NUM+8)]
 
         #tf.summary.image("heatmap", tf.stack([input_heatmap,heatmap], axis=-1), step=0)
+        #tf.print(tf.summary.experimental.get_step())
+        tf.summary.image("pred-heatmap", pred_heatmap)
+        tf.summary.image("gt-heatmap", input_heatmap)
 
-        tf.summary.image("pred-heatmap", heatmap, step = 0)
-        tf.summary.image("gt-heatmap", input_heatmap, step = 0)
-
-        loss1 = heatmap_loss(input_heatmap, heatmap, input_obj_ind)
-        loss2 = offset_loss(input_offset, offset)
+        loss_heatmap = heatmap_loss(input_heatmap, pred_heatmap, input_obj_ind)
+        loss_offset =  offset_loss(input_offset, pred_offset)
+        loss_z = index_masked_regressoin_l1_loss(input_z, pred_z, input_obj_ind)
+        loss_size = index_masked_regressoin_l1_loss(input_size, pred_size, input_obj_ind)
+        loss_angle = index_masked_regressoin_l1_loss(input_angle, pred_angle, input_obj_ind)
         #loss = tf.reduce_mean(tf.square(input_heatmap-heatmap))
         
-        return loss2 + loss1
+        tf.summary.scalar("loss_heatmap", loss_heatmap)
+        tf.summary.scalar("loss_offset", loss_offset)
+        tf.summary.scalar("loss_z", loss_z)
+        tf.summary.scalar("loss_size", loss_size)
+        tf.summary.scalar("loss_angle", loss_angle)
+        
+
+        return loss_heatmap + loss_offset + loss_z + loss_size + loss_angle
 
 
 def get_model(num_classes, input_dim, is_training):
