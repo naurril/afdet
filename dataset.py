@@ -32,7 +32,7 @@ def get_dataset():
     def tf_load_frame(idx):
         [pillar_image, gt] = tf.py_function(load_frame, [idx], [tf.float32, tf.float32])
         
-        pillar_image.set_shape([H,W,P,D-3])
+        pillar_image.set_shape([H,W,10,6])
         gt.set_shape([H,W,CLASS_NUM+9])
 
         return pillar_image, gt

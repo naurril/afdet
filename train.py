@@ -18,7 +18,7 @@ file_writer = tf.summary.create_file_writer(log_dir)
 file_writer.set_as_default()
 
 
-model = M.get_model(CLASS_NUM, [H, W, P, D], True)
+model = M.get_model(CLASS_NUM, [H, W, P, D-3], True)
 
 train_data, eval_data = dataset.get_dataset()
 train_data = train_data.batch(4)
@@ -33,13 +33,13 @@ tf.debugging.experimental.enable_dump_debug_info(
 
 def lr_scheduler(epoch):
     def lr_by_epoch(epoch):
-        if epoch < 10:
+        if epoch < 3:
             return 0.001
         elif epoch < 5:
             return 0.0005
-        elif epoch < 20:
+        elif epoch < 10:
             return 0.0001
-        elif epoch < 40:
+        elif epoch < 15:
             return 0.00005
         else: 
             return 0.00001
@@ -62,14 +62,14 @@ class StepCallback(tf.keras.callbacks.Callback):
 class SaveCallback(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         if epoch % 2 == 0:
-            self.model.save("epoch_{}_{}".format(epoch, model_file), include_optimizer=True, overwrite=True)
-            model.save_weights("epoch_{}_{}".format(epoch, weights_file))
+            self.model.save("./models/epoch_{}_{}".format(epoch, model_file), include_optimizer=True, overwrite=True)
+            model.save_weights("./models/epoch_{}_{}".format(epoch, weights_file))
             print("model saved!")
 
 #tf.summary.experimental.set_step(0)
 #model.fit(train_data, validation_data=train_data , epochs=250, callbacks=[tensorboard_callback, lr_callback, SaveCallback()])
 model.fit(train_data,     
-          validation_data=eval_data, epochs=80, callbacks=[tensorboard_callback, lr_callback, SaveCallback(), StepCallback()])
+          validation_data=eval_data, epochs=20, callbacks=[tensorboard_callback, lr_callback, SaveCallback(), StepCallback()])
 
-model.save(model_file, include_optimizer=True, overwrite=True)
-model.save_weights(weights_file)
+model.save("./models/" + model_file, include_optimizer=True, overwrite=True)
+model.save_weights("./models/" + weights_file)

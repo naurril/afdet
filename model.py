@@ -3,8 +3,8 @@ import config
 
 
 def conv2d(x, filters, kernel_size, strides, is_training=True):
-    x = tf.keras.layers.BatchNormalization(momentum=0.9)(x, is_training)
     x = tf.keras.layers.Conv2D(filters, kernel_size, strides=strides, padding='same', data_format='channels_last')(x)
+    x = tf.keras.layers.BatchNormalization(momentum=0.9)(x, is_training)
     x = tf.keras.layers.ReLU()(x)
     return x
 
@@ -13,7 +13,10 @@ def point_pillars(pillars, is_training):
     # B * H * W  * N * D
     # B * P * N * D
     x = tf.reshape(pillars, [-1, pillars.shape[1]*pillars.shape[2], pillars.shape[3], pillars.shape[4]])
-    x = conv2d(x, 64, (1,1), (1,1), is_training)
+    #x = conv2d(x, 64, (1,1), (1,1), is_training)
+    x = tf.keras.layers.Conv2D(64, 1, strides=1, padding='same', data_format='channels_last')(x)
+    x = tf.keras.layers.BatchNormalization(momentum=0.9)(x, is_training)
+    x = tf.keras.layers.ReLU()(x)
     x = tf.keras.layers.MaxPool2D(pool_size=(1, x.shape[2]))(x)   # b pillar 1 d=64
     x = tf.reshape(x, [-1, pillars.shape[1], pillars.shape[2], x.shape[3]])   # b h w d3=64, each pillar is represented by a 64-vector
     return x
@@ -200,7 +203,7 @@ class TfnetLoss(tf.keras.losses.Loss):
 def get_model(num_classes, input_dim, is_training):
     H,W,P,D=input_dim
     
-    input_pointcloud = tf.keras.Input(shape=(H, W, P, D-3)) #
+    input_pointcloud = tf.keras.Input(shape=(H, W, P, D)) #
     
     # input_obj_ind = tf.keras.Input(dtype=tf.bool, shape=(H, W, 1)) #
 

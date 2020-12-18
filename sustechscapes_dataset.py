@@ -54,7 +54,30 @@ class SustechScapesDataset:
         
         return label
     
-    
+    def box_to_label(self, box):
+        return {
+            "probability": box[0],
+            "obj_type": box[1],
+            "obj_id":"",
+            "psr":{
+                "position": {
+                    "x": box[2],
+                    "y": box[3],
+                    "z": box[4],
+                },
+                "scale": {
+                    "x": box[5],
+                    "y": box[6],
+                    "z": box[7],
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": box[8],
+                },
+            }
+        }
+        
     def label_to_nparray(self, labels, class_index_map):
         labels = filter(lambda b: class_index_map.get(b["obj_type"]) is not None , labels)
 
