@@ -1,85 +1,102 @@
 
-
 import numpy as np
-import pandas as pd
 import os
 import math
 from config import *
 from timeit import timeit
 from multiprocessing import Pool
+import pickle
 
 from sustechscapes_dataset  import SustechScapesDataset
 
-def cloud_to_pillars(points, dx, dy, min_pts):
-    #dx=0.6
-    #dy=0.6
+def cloud_to_pillars(points, d0, d1, min_pts):
+    #d0=0.6
+    #d1=0.6
     #min_pts = 10
 
     #front_points  = d.crop_points_in_camera_view("kitti","000001", "front")
     #points = front_points
 
     # grid coordinates
-    grid_coord_raw = points[:,0:2]/np.array([dx,dy]) #.reshape([-1,2])
+    grid_coord_raw = points[:,0:2]/np.array([d0,d1]) #.reshape([-1,2])
     grid_coord = np.round(grid_coord_raw)  # np.round, the grid_coord are in the center of the pillar.
 
     # attach grid coord to all points
     grid_data = np.concatenate([points,grid_coord], axis=-1)
     #grid_data
 
-    def do_sample(points, min_pts):
+    def do_sample(points, idx, min_pts):
+        idx = np.reshape(idx, (1,2))
+        idx_pos = idx*np.array([d0,d1])
         points_coord = points[:,0:3]
         dist2center = points_coord-points_coord.mean(axis=0)
-        dist2pillarcenter = points[:,0:2] - points[:, 4:6]  # 4:6 are pillor coordinates, and the center of the pillar
-        #print(points.shape, dist2center.shape, dist2pillarcenter.shape)
+        dist2pillarcenter = points[:,0:2] - idx_pos  # 4:6 are pillor coordinates, and the center of the pillar
         pt_features = np.concatenate([points[:,0:4], dist2center, dist2pillarcenter], axis=-1)
 
-        #print(pt_features)
+        return pt_features
 
+    def resample_pillar_points(pt_features):
         if pt_features.shape[0]>min_pts:
             idx = np.arange(pt_features.shape[0])
             np.random.shuffle(idx)
             ret_features =  pt_features[idx[0:min_pts]]
-            return ret_features
         else:
             padding = np.zeros([min_pts-pt_features.shape[0], pt_features.shape[1]])
-            return  np.concatenate([pt_features, padding], axis=0)
+            ret_features = np.concatenate([pt_features, padding], axis=0)
+        return ret_features
 
-
-    def make_one_pillar(pts):
-        np_pts = pts.to_numpy()
-        pts = do_sample(np_pts, min_pts)
-        pts = pts
+    def make_one_pillar(pts,idx):
+        pts = do_sample(pts, idx, min_pts)
         return pts
 
-    df = pd.DataFrame(data=grid_data)
-    df_features = df.groupby([4,5], as_index=False).apply(make_one_pillar)
-    
-    pilar_coord = np.apply_along_axis(lambda x:list(x), 0, df_features.index.to_numpy())
-        
-    return np.stack(df_features), pilar_coord
+    index = np.unique(grid_coord, axis=0)
+    # df = pd.DataFrame(data=grid_data)
+    # df_groupby = df.groupby([4,5], as_index=False)
+    # df_features = df_groupby.apply(make_one_pillar)
+    pillars = []
+    for idx in index:
+        keep = ((grid_data[:,4] == idx[0]) & (grid_data[:,5]==idx[1]))
+        group = grid_data[keep][:,:4]
+        pillar = make_one_pillar(group, idx)
+        pillars.append(pillar)
+
+    points_number = list(map(lambda p:p.shape[0], pillars))
+    print(len(points_number))
+    sort_indices = np.argsort(points_number)
+
+    if len(points_number) > 1600:
+        sort_indices = sort_indices[(len(points_number)-1600): len(points_number)]
+
+    pillars = np.array(pillars)[sort_indices]
+    index = np.array(index)[sort_indices]
+
+    pillars = map(resample_pillar_points, pillars)
+    pillars = np.stack(pillars)
+    return pillars,index
 
 
 # for kitti, the front camera view covers x \in [0,80], y \in [-40,40] area
 # x goes forward in kitti lidar coordinate system
 
-
-def kitti_pillar_coord_to_image_pos(coord, dx, dy, img_dim):
+def kitti_pillar_coord_to_image_pos(coord, d0, d1, img_dim):
     return (coord + np.array([0., img_dim[1]/2])).astype(np.int)
 
-def pillars_to_image(pillars ,pillar_coord, dx, dy, img_dim):
-    #img_dim = np.ceil([50.*2/dx, 80./dy]).astype(np.int)
-    image = np.zeros([img_dim[0], img_dim[1], pillars.shape[1], pillars.shape[2]])
-    #print(image.shape)
+def valid_pillar_coord(pillar_coord, d0, d1, img_dim):
+    img_pos = kitti_pillar_coord_to_image_pos(pillar_coord, d0, d1, img_dim)
+    return img_pos[:,0] >= 0 &  img_pos[:,1] >= 0 & img_pos[:,0] < img_dim[0] & img_pos[:,1] < img_dim[1]
 
-    img_pos = kitti_pillar_coord_to_image_pos(pillar_coord, dx, dy, img_dim)
-    
-    for i in range(pillars.shape[0]):
-        px,py = img_pos[i]
-        if px < 0 or py < 0 or px >= img_dim[0] or py >= img_dim[1]:
-            continue
-        image[px,py] = pillars[i]
+def build_pillar_image(d,f,save_path):    
+    print(f)
+    front_points  = d.crop_points_in_camera_view("kitti",f, "front")
+    pillars,coord = cloud_to_pillars(front_points, d0, d1, min_pts)
+
         
-    return image
+    with open(os.path.join(save_path, "pillars", f), "wb") as f:
+        pickle.dump((pillars, coord), f)
+    #img is too large, so we save indices and pillars only
+    #img = pillars_to_image(pillars, coord, d0, d1, img_dim)        
+    #img.tofile(os.path.join(save_path, "pillars", f))
+
 
 
 kitti_cls_num = 3
@@ -90,7 +107,7 @@ kitti_cls_index_map={
 }
 
 
-def build_gt(labels, dx, dy, img_dim):
+def build_gt(labels, d0, d1, img_dim):
     H,W = img_dim
 
     if labels is None:
@@ -102,8 +119,8 @@ def build_gt(labels, dx, dy, img_dim):
     # input_obj_ind = tf.keras.Input(dtype=tf.bool, shape=(H, W, 1)) #
     
     box_positions = labels[:, 0:2]
-    box_pillar_coord = np.round(box_positions[:, 0:2]/np.array([dx, dy]))
-    box_img_coord = kitti_pillar_coord_to_image_pos(box_pillar_coord, dx, dy, (H,W))
+    box_pillar_coord = np.round(box_positions[:, 0:2]/np.array([d0, d1]))
+    box_img_coord = kitti_pillar_coord_to_image_pos(box_pillar_coord, d0, d1, (H,W))
 
 
     # obj img index
@@ -115,6 +132,8 @@ def build_gt(labels, dx, dy, img_dim):
     obj_size =  np.zeros((H,W,3))
     obj_angle = np.zeros((H,W,2))
     
+   
+
     for idx in range (box_img_coord.shape[0]):
         
         x,y = box_img_coord[idx,:] # this is int
@@ -122,21 +141,22 @@ def build_gt(labels, dx, dy, img_dim):
         if x >=0 and x < Ｈ and y >=0 and y < W:
             obj_ind[x,y]=1.0
             obj_z[x,y] = labels[idx, 2]
-            obj_size[x,y] =  labels[idx, 3:6]
+            obj_size[x,y] =  labels[idx, 3:6] # shall we use unit d0/d1
             obj_angle[x,y] = [math.cos(labels[idx, 8]), math.sin(labels[idx, 8])]
 
         channel_ind = int(labels[idx, 9])
         # note: in centernet, the \sigma is adaptive according to actual object size
         # todo:
-        for i in range(obj_heatmap.shape[0]):
-            for j in range(obj_heatmap.shape[1]):
-                obj_heatmap[i,j, channel_ind] = max(obj_heatmap[i,j, channel_ind], math.exp(-((x-i)*(x-i) + (y-j)*(y-j))/2.0))  # gaussian kernel
+        for i in range(x-offset_radius, x+offset_radius):
+            for j in range(y-offset_radius, y+offset_radius):
+                if i >=0 and i < Ｈ and j >=0 and j < W:
+                    obj_heatmap[i,j, channel_ind] = max(obj_heatmap[i,j, channel_ind], math.exp(-((x-i)*(x-i) + (y-j)*(y-j))/2.0))  # gaussian kernel
 
     ## offset
     ## we need to set offset for all pixels around the object position
     ## with radius r
-    offset = box_pillar_coord * np.array([dx, dy]) - box_positions  # use pillar coord rather than image coord
-    offset /= dx  # offset is in units of the pillar size
+    offset = box_pillar_coord * np.array([d0, d1]) - box_positions  # use pillar coord rather than image coord
+    offset /= d0  # offset is in units of the pillar size
     obj_offset = np.zeros((H, W, 2))
 
     for idx in range (box_img_coord.shape[0]):
@@ -157,7 +177,7 @@ def build_gt(labels, dx, dy, img_dim):
         
     # z coord
 
-    # grid_coord_raw = points[:,0:2]/np.array([dx,dy]).reshape([-1,2])
+    # grid_coord_raw = points[:,0:2]/np.array([d0,d1]).reshape([-1,2])
     # grid_coord = np.round(grid_coord_raw)
 
     # #ground truth
@@ -171,20 +191,6 @@ def build_gt(labels, dx, dy, img_dim):
     #return np.concatenate([obj_heatmap, obj_offset], axis=-1)
 
 
-def build_pillar_image(d,f,save_path):    
-        print(f)
-        #print("crop", timeit(lambda : d.crop_points_in_camera_view("kitti",f, "front"), number=10))
-
-        front_points  = d.crop_points_in_camera_view("kitti",f, "front")
-    
-        #print("pillorize", timeit(lambda : cloud_to_pillars(front_points, dx, dy, min_pts), number=10))
-        pillars,coord = cloud_to_pillars(front_points, dx, dy, min_pts)
-        
-        #print("toimage", timeit(lambda : pillars_to_image(pillars, coord, dx, dy, img_dim), number=10))
-        img = pillars_to_image(pillars, coord, dx, dy, img_dim)
-        print(img.mean())
-        img.tofile(os.path.join(save_path, "pillars", f))
-
 
 def build_gt_file(d,f,save_path):
     print(f)
@@ -197,7 +203,7 @@ def build_gt_file(d,f,save_path):
 
     
     #labels = label_nparray.reshape((-1,10))  # last ele is typeindex
-    gt = build_gt(label_nparray, dx, dy, img_dim)
+    gt = build_gt(label_nparray, d0, d1, img_dim)
     #print(gt.shape, np.mean(gt,axis=(0,1)), np.sum(gt[:,:,0]))
 
     # save img,heatmap,offset, for later training and testing
@@ -208,8 +214,8 @@ def build_gt_file(d,f,save_path):
 
 
 def prepare_raw_data(func):
-    sustechscapes_root_dir = "/home/lie/fast/code/SUSTechPoints-be/data"
-    save_path = "./data/kitti"
+    sustechscapes_root_dir = "/home/lie/code/SUSTechPOINTS/data"
+    save_path = "./data/kitti-afdet"
 
     d = SustechScapesDataset(sustechscapes_root_dir, ["kitti"])
     scene = d.get_scene("kitti")
@@ -234,7 +240,9 @@ def test():
 
 
 if __name__ == "__main__":
-    prepare_raw_data(build_gt_file)
+    
+    prepare_raw_data(build_pillar_image)
+    #prepare_raw_data(build_gt_file)
 
     #test()
 

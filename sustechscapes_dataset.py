@@ -185,8 +185,8 @@ class SustechScapesDataset:
 
         imgfinal = imgpos2[:, 0:2]/imgpos2[:, 2:]
 
-        dx,dy,dc = self.get_image_dimension(scene, camera)
-        filter = (imgpos3[:,2] > 0) & (imgfinal[:,1] > 0) & (imgfinal[:,1]<dx) & (imgfinal[:,0]>0) & (imgfinal[:,0]<dy)
+        d0,d1,dc = self.get_image_dimension(scene, camera)
+        filter = (imgpos3[:,2] > 0) & (imgfinal[:,1] > 0) & (imgfinal[:,1]<d0) & (imgfinal[:,0]>0) & (imgfinal[:,0]<d1)
         
         # pts here is 4d but with last dim being 1.
         #print(filter.shape, pts.shape)

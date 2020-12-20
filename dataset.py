@@ -4,7 +4,7 @@ import os
 from config import *
 
 
-data_path = "./data/kitti"
+data_path = "./data/kitti-afdet"
 
 def get_dataset():
 
