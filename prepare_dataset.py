@@ -9,7 +9,7 @@ import pickle
 
 from sustechscapes_dataset  import SustechScapesDataset
 
-def cloud_to_pillars(points, PILLAR_SIZE_X, PILLAR_SIZE_Y, MIN_POINTS_PER_PILLAR):
+def cloud_to_pillars(points):
     #PILLAR_SIZE_X=0.6
     #PILLAR_SIZE_Y=0.6
     #MIN_POINTS_PER_PILLAR = 10
@@ -25,7 +25,7 @@ def cloud_to_pillars(points, PILLAR_SIZE_X, PILLAR_SIZE_Y, MIN_POINTS_PER_PILLAR
     grid_data = np.concatenate([points,grid_coord], axis=-1)
     #grid_data
 
-    def extract_feature(points, idx, MIN_POINTS_PER_PILLAR):
+    def extract_feature(points, idx):
         idx = np.reshape(idx, (1,2))
         idx_pos = idx*np.array([PILLAR_SIZE_X,PILLAR_SIZE_Y])
         points_coord = points[:,0:3]
@@ -47,7 +47,7 @@ def cloud_to_pillars(points, PILLAR_SIZE_X, PILLAR_SIZE_Y, MIN_POINTS_PER_PILLAR
         return ret_features
 
     def make_one_pillar(pts,idx):
-        pts = extract_feature(pts, idx, MIN_POINTS_PER_PILLAR)
+        pts = extract_feature(pts, idx)
         return pts
 
     index = np.unique(grid_coord, axis=0)
@@ -75,7 +75,7 @@ def cloud_to_pillars(points, PILLAR_SIZE_X, PILLAR_SIZE_Y, MIN_POINTS_PER_PILLAR
     #index = np.array(index)[sort_indices]
     
     # translate index should be after pillar feature extracting
-    index = kitti_pillar_coord_to_image_pos(index, PILLAR_SIZE_X, PILLAR_SIZE_Y, IMAGE_DIMENSION)
+    index = kitti_pillar_coord_to_image_pos(index)
 
     pillars = map(resample_pillar_points, pillars)
     pillars = np.stack(pillars)
@@ -85,17 +85,18 @@ def cloud_to_pillars(points, PILLAR_SIZE_X, PILLAR_SIZE_Y, MIN_POINTS_PER_PILLAR
 # for kitti, the front camera view covers x \in [0,80], y \in [-40,40] area
 # x goes forward in kitti lidar coordinate system
 
-def kitti_pillar_coord_to_image_pos(coord, PILLAR_SIZE_X, PILLAR_SIZE_Y, IMAGE_DIMENSION):
-    return (coord + np.array([0., IMAGE_DIMENSION[1]/2])).astype(np.int)
+def kitti_pillar_coord_to_image_pos(coord):
+    return (coord + np.array(IAMGE_COORD_OFFSET)).astype(np.int)
 
-def valid_pillar_coord(pillar_coord, PILLAR_SIZE_X, PILLAR_SIZE_Y, IMAGE_DIMENSION):
-    img_pos = kitti_pillar_coord_to_image_pos(pillar_coord, PILLAR_SIZE_X, PILLAR_SIZE_Y, IMAGE_DIMENSION)
+def valid_pillar_coord(pillar_coord):
+    img_pos = kitti_pillar_coord_to_image_pos(pillar_coord)
     return (img_pos[:,0] >= 0) &  (img_pos[:,1] >= 0) & (img_pos[:,0] < IMAGE_DIMENSION[0]) & (img_pos[:,1] < IMAGE_DIMENSION[1])
 
 def build_pillar_image(d,f,save_path):    
+    "dataset, frame, savepath"
     print(f)
     front_points  = d.crop_points_in_camera_view("kitti",f, "front")
-    pillars,coord = cloud_to_pillars(front_points, PILLAR_SIZE_X, PILLAR_SIZE_Y, MIN_POINTS_PER_PILLAR)
+    pillars,coord = cloud_to_pillars(front_points)
 
         
     with open(os.path.join(save_path, "pillars", f), "wb") as f:
@@ -114,7 +115,7 @@ kitti_cls_index_map={
 }
 
 
-def build_gt(labels, PILLAR_SIZE_X, PILLAR_SIZE_Y, IMAGE_DIMENSION):
+def build_gt(labels):
     H,W = IMAGE_DIMENSION
 
     if labels is None:
@@ -127,7 +128,7 @@ def build_gt(labels, PILLAR_SIZE_X, PILLAR_SIZE_Y, IMAGE_DIMENSION):
     
     box_positions = labels[:, 0:2]
     box_pillar_coord = np.round(box_positions[:, 0:2]/np.array([PILLAR_SIZE_X, PILLAR_SIZE_Y]))
-    box_img_coord = kitti_pillar_coord_to_image_pos(box_pillar_coord, PILLAR_SIZE_X, PILLAR_SIZE_Y, (H,W))
+    box_img_coord = kitti_pillar_coord_to_image_pos(box_pillar_coord)
 
 
     # obj img index
@@ -210,7 +211,7 @@ def build_gt_file(d,f,save_path):
 
     
     #labels = label_nparray.reshape((-1,10))  # last ele is typeindex
-    gt = build_gt(label_nparray, PILLAR_SIZE_X, PILLAR_SIZE_Y, IMAGE_DIMENSION)
+    gt = build_gt(label_nparray)
     #print(gt.shape, np.mean(gt,axis=(0,1)), np.sum(gt[:,:,0]))
 
     # save img,heatmap,offset, for later training and testing
@@ -221,7 +222,7 @@ def build_gt_file(d,f,save_path):
 
 
 def prepare_raw_data(func):
-    sustechscapes_root_dir = "/home/lie/fast/code/SUSTechPoints-be/data"
+    sustechscapes_root_dir = "/home/lie/code/SUSTechPOINTS/data"
     save_path = "./data/kitti-afdet"
 
     d = SustechScapesDataset(sustechscapes_root_dir, ["kitti"])
@@ -229,22 +230,6 @@ def prepare_raw_data(func):
     
     for f in scene["frames"]:
         func(d,f,save_path)
-
-def test():
-    points = np.array([
-        [-0.1,0.4,1,3],
-        [0.1,0.5,2,4],
-        [1,1,0,5],
-        [0,-1,0,6],
-        ])
-    features, coord = cloud_to_pillars(points, 1, 1, 3)
-    assert(features.shape[0]==3)
-    print(features)
-    print(coord)
-
-    img = pillars_to_image(features, coord, 1, 1, [3,3])
-    print(img)
-
 
 if __name__ == "__main__":
     
