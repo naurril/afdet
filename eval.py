@@ -73,8 +73,8 @@ def predict_one_frame(frame):
                     if keep[n,h,w,c]:
                         prob = heatmap[n, h, w, c]
                         if (prob > 0.6):
-                            print(n,h,w,c,d0,d1, offset[n,h,w])
-                            box = [prob, c, (h - offset[n,h,w,0])*d0, (w-offset[n,h,w,1]-shape[2]/2)*d1, z[n,h,w,0],
+                            print(n,h,w,c,PILLAR_SIZE_X,PILLAR_SIZE_Y, offset[n,h,w])
+                            box = [prob, c, (h - offset[n,h,w,0])*PILLAR_SIZE_X, (w-offset[n,h,w,1]-shape[2]/2)*PILLAR_SIZE_Y, z[n,h,w,0],
                                     size[n,h,w,0], size[n,h,w,1], size[n,h,w,2],
                                     math.atan2(angle[n,h,w,1],angle[n,h,w,0]),
                                 ]

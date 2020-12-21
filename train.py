@@ -8,7 +8,8 @@ weights_file = "afnet_weights.h5"
 
 from config import *
 
-
+# tf.python.framework.ops.disable_eager_execution()
+# tf.compat.v1.experimental.output_all_intermediates(True)
 tf.random.set_seed(0)
 
 
@@ -18,7 +19,7 @@ file_writer = tf.summary.create_file_writer(log_dir)
 file_writer.set_as_default()
 
 
-model = M.get_model(CLASS_NUM, [H, W, P, D-3], True)
+model = M.get_model(CLASS_NUM, [MAX_PILLAR_NUM, H, W, P, D-3], True)
 
 train_data, eval_data = dataset.get_dataset()
 train_data = train_data.batch(4)
@@ -58,6 +59,7 @@ class StepCallback(tf.keras.callbacks.Callback):
     def on_epoch_begin(self, epoch, logs=None):
         self.epoch.assign(epoch)
         tf.summary.experimental.set_step(self.epoch)
+        
 
 class SaveCallback(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):

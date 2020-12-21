@@ -14,11 +14,13 @@ def point_pillars(pillars, is_training):
     # B * P * N * D
     x = tf.reshape(pillars, [-1, pillars.shape[1]*pillars.shape[2], pillars.shape[3], pillars.shape[4]])
     #x = conv2d(x, 64, (1,1), (1,1), is_training)
+    #x = pillars
     x = tf.keras.layers.Conv2D(64, 1, strides=1, padding='same', data_format='channels_last')(x)
     x = tf.keras.layers.BatchNormalization(momentum=0.9)(x, is_training)
     x = tf.keras.layers.ReLU()(x)
     x = tf.keras.layers.MaxPool2D(pool_size=(1, x.shape[2]))(x)   # b pillar 1 d=64
     x = tf.reshape(x, [-1, pillars.shape[1], pillars.shape[2], x.shape[3]])   # b h w d3=64, each pillar is represented by a 64-vector
+    #x = tf.squeeze(x, axis=-2)
     return x
 
 def backbone(x, is_training):
@@ -42,6 +44,7 @@ def backbone(x, is_training):
 def get_multiple_headers(input, num_classes, is_training):
     # cannot find description of the hotmap header
     # b, h, w, d
+    
     x = input
     #x = conv2d(x, num_classes, (3,3),(1,1), is_training)
     #x = conv2d(x, num_classes, (1,1),(1,1), is_training)
@@ -178,8 +181,6 @@ class TfnetLoss(tf.keras.losses.Loss):
         pred_size  = y_pred[:,:,:,(config.CLASS_NUM+3):(config.CLASS_NUM+6)]
         pred_angle  = y_pred[:,:,:,(config.CLASS_NUM+6):(config.CLASS_NUM+8)]
 
-        #tf.summary.image("heatmap", tf.stack([input_heatmap,heatmap], axis=-1), step=0)
-        #tf.print(tf.summary.experimental.get_step())
         tf.summary.image("pred-heatmap", pred_heatmap)
         tf.summary.image("gt-heatmap", input_heatmap)
 
@@ -188,7 +189,7 @@ class TfnetLoss(tf.keras.losses.Loss):
         loss_z = index_masked_regressoin_l1_loss(input_z, pred_z, input_obj_ind)
         loss_size = index_masked_regressoin_l1_loss(input_size, pred_size, input_obj_ind)
         loss_angle = index_masked_regressoin_l1_loss(input_angle, pred_angle, input_obj_ind)
-        #loss = tf.reduce_mean(tf.square(input_heatmap-heatmap))
+        
         
         tf.summary.scalar("loss_heatmap", loss_heatmap)
         tf.summary.scalar("loss_offset", loss_offset)
@@ -200,9 +201,33 @@ class TfnetLoss(tf.keras.losses.Loss):
         return loss_heatmap + loss_offset + loss_z + loss_size + loss_angle
 
 
+class AfdetModel(tf.keras.Model):
+    def train_step(self, data):
+        # Unpack the data. Its structure depends on your model and
+        # on what you pass to `fit()`.
+        pillars, coord, gt = data
+
+        with tf.GradientTape() as tape:
+            y_pred = self(x, training=True)  # Forward pass
+            # Compute the loss value
+            # (the loss function is configured in `compile()`)
+            loss = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
+
+        # Compute gradients
+        trainable_vars = self.trainable_variables
+        gradients = tape.gradient(loss, trainable_vars)
+        # Update weights
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+        # Update metrics (includes the metric that tracks the loss)
+        self.compiled_metrics.update_state(y, y_pred)
+        # Return a dict mapping metric names to current value
+        return {m.name: m.result() for m in self.metrics}
+
 def get_model(num_classes, input_dim, is_training):
-    H,W,P,D=input_dim
+    N,H,W,P,D=input_dim
     
+    #input_pillars = tf.keras.Input(shape=[N,P,D])
+    #input_indices = tf.keras.Input(shape=[N,2], dtype=tf.int64)
     input_pointcloud = tf.keras.Input(shape=(H, W, P, D)) #
     
     # input_obj_ind = tf.keras.Input(dtype=tf.bool, shape=(H, W, 1)) #
@@ -216,7 +241,14 @@ def get_model(num_classes, input_dim, is_training):
     # input_dim =  tf.keras.Input(shape=(H, W, num_classes*3))
     # input_orientation = tf.keras.Input(shape=(H, W, num_classes*8))
 
-    x = point_pillars(input_pointcloud, is_training)
+    x = point_pillars(input_pointcloud, is_training)   # x is 1600*64
+
+    # feature_dim = x.shape[-1]
+    # def scatter_pillars(arg):
+    #     indices, pillars = arg
+    #     return tf.scatter_nd(indices, pillars, [H,W,feature_dim])
+    # x = tf.vectorized_map(scatter_pillars, (input_indices, x))
+
     x = backbone(x, is_training)
     header = get_header(x, num_classes, is_training)
     #(heatmap, offset, z_value, dim, orientation) = header

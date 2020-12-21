@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import os
 from config import *
-
+import pickle
 
 data_path = "./data/kitti-afdet"
 
@@ -20,9 +20,26 @@ def get_dataset():
 
     def load_frame(idx):
         f = frames[idx]
-        pillar_image = np.fromfile(os.path.join(data_path, "pillars", f))
-        pillar_image = np.reshape(pillar_image, [H,W,10,9])
-        pillar_image = pillar_image[:,:,:,3:]
+        
+        # pillar_image = np.fromfile(os.path.join(data_path, "pillars", f))
+        # pillar_image = np.reshape(pillar_image, [H,W,10,9])
+        # pillar_image = pillar_image[:,:,:,3:]
+
+        with open(os.path.join(data_path,"pillars",f),"rb") as fin:
+            pillars, coord = pickle.load(fin)  #1600,10,9; 1600,2
+            
+            pillars = pillars[:,:,3:]
+            pillar_image = np.zeros([H,W,10,6],dtype=np.float64)
+
+            coord = coord.astype(np.int64)
+            for i in range(coord.shape[0]):
+                x,y = coord[i]
+                if x>=0 and x < H and y>=0 and y<W:
+                    pillar_image[coord[i,0],coord[i,1]] = pillars[i]
+                else:
+                    print("out of range", x, y)
+
+
         #print(np.mean(pillar_image), np.max(pillar_image), np.min(pillar_image))
         gt = np.fromfile(os.path.join(data_path, "gt", f))
         gt = np.reshape(gt, [H,W,CLASS_NUM+9]) #ind, heatmap, offset, z, size, angle
@@ -30,12 +47,13 @@ def get_dataset():
         return pillar_image, gt
 
     def tf_load_frame(idx):
-        [pillar_image, gt] = tf.py_function(load_frame, [idx], [tf.float32, tf.float32])
+        [pillars, gt] = tf.py_function(load_frame, [idx], [tf.float32,tf.float32])
         
-        pillar_image.set_shape([H,W,10,6])
+        pillars.set_shape([H,W,10,6])
+        #coord.set_shape([1600,2])
         gt.set_shape([H,W,CLASS_NUM+9])
 
-        return pillar_image, gt
+        return pillars, gt
 
     train_data = train_data.map(tf_load_frame)
     eval_data = eval_data.map(tf_load_frame)
