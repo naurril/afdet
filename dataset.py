@@ -29,12 +29,12 @@ def get_dataset():
             pillars, coord = pickle.load(fin)  #1600,10,9; 1600,2
             
             pillars = pillars[:,:,3:]
-            pillar_image = np.zeros([H,W,10,6],dtype=np.float64)
+            pillar_image = np.zeros([PILLAR_IMAGE_HEIGHT,PILLAR_IMAGE_WIDTH,10,6],dtype=np.float64)
 
             coord = coord.astype(np.int64)
             for i in range(coord.shape[0]):
                 x,y = coord[i]
-                if x>=0 and x < H and y>=0 and y<W:
+                if x>=0 and x < PILLAR_IMAGE_HEIGHT and y>=0 and y<PILLAR_IMAGE_WIDTH:
                     pillar_image[coord[i,0],coord[i,1]] = pillars[i]
                 else:
                     print("out of range", x, y)
@@ -42,16 +42,16 @@ def get_dataset():
 
         #print(np.mean(pillar_image), np.max(pillar_image), np.min(pillar_image))
         gt = np.fromfile(os.path.join(data_path, "gt", f))
-        gt = np.reshape(gt, [H,W,CLASS_NUM+9]) #ind, heatmap, offset, z, size, angle
+        gt = np.reshape(gt, [PILLAR_IMAGE_HEIGHT,PILLAR_IMAGE_WIDTH,CLASS_NUM+9]) #ind, heatmap, offset, z, size, angle
 
         return pillar_image, gt
 
     def tf_load_frame(idx):
         [pillars, gt] = tf.py_function(load_frame, [idx], [tf.float32,tf.float32])
         
-        pillars.set_shape([H,W,10,6])
+        pillars.set_shape([PILLAR_IMAGE_HEIGHT,PILLAR_IMAGE_WIDTH,10,6])
         #coord.set_shape([1600,2])
-        gt.set_shape([H,W,CLASS_NUM+9])
+        gt.set_shape([PILLAR_IMAGE_HEIGHT,PILLAR_IMAGE_WIDTH,CLASS_NUM+9])
 
         return pillars, gt
 
