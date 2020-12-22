@@ -22,8 +22,8 @@ file_writer.set_as_default()
 model = M.get_model(CLASS_NUM, [MAX_PILLAR_NUM, PILLAR_IMAGE_HEIGHT, PILLAR_IMAGE_WIDTH, MIN_POINTS, POINT_FEATURE_LENGTH-3], True)
 
 train_data, eval_data = dataset.get_dataset()
-train_data = train_data.batch(4)
-eval_data = eval_data.batch(4)
+train_data = train_data.batch(2)
+eval_data = eval_data.batch(2)
 
 
 tf.debugging.experimental.enable_dump_debug_info(

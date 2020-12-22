@@ -52,7 +52,7 @@ def cloud_to_pillars(points):
 
     index = np.unique(grid_coord, axis=0)
     #index = kitti_pillar_coord_to_image_pos(index, PILLAR_SIZE_X, PILLAR_SIZE_Y, IMAGE_DIMENSION)
-    index = index[valid_pillar_coord(index, PILLAR_SIZE_X, PILLAR_SIZE_Y, IMAGE_DIMENSION)]
+    index = index[valid_pillar_coord(index)]
 
     # df = pd.DataFrame(data=grid_data)
     # df_groupby = df.groupby([4,5], as_index=False)
@@ -222,7 +222,7 @@ def build_gt_file(d,f,save_path):
 
 
 def prepare_raw_data(func):
-    sustechscapes_root_dir = "/home/lie/code/SUSTechPOINTS/data"
+    sustechscapes_root_dir = "/home/lie/fast/code/SUSTechPoints-be/data"
     save_path = "./data/kitti-afdet"
 
     d = SustechScapesDataset(sustechscapes_root_dir, ["kitti"])

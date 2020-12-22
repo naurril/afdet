@@ -6,7 +6,7 @@ import numpy as np
 import os
 import math
 import json
-
+import pickle
 
 model_file = "afnet.h5"
 weights_file = "afnet_weights.h5"
@@ -16,14 +16,15 @@ from config import *
 tf.random.set_seed(0)
 
 
-log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+log_dir = "logs/eval/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 file_writer = tf.summary.create_file_writer(log_dir)
 file_writer.set_as_default()
 
 
-model = M.get_model(CLASS_NUM, [H, W, P, D-3], True)
-model.load_weights("models/epoch_2_afnet_weights.h5")
+
+model = M.get_model(CLASS_NUM, [MAX_PILLAR_NUM, PILLAR_IMAGE_HEIGHT, PILLAR_IMAGE_WIDTH, MIN_POINTS, POINT_FEATURE_LENGTH-3], True)
+model.load_weights("models/afnet_weights.h5")
 # model_file = "models/feature_no_point_coord/afnet.h5"
 # model = tf.keras.models.load_model(model_file)
 model.summary()
@@ -37,18 +38,25 @@ kitti_cls_name=[
         ]
 
 
+data_path = "./data/kitti-afdet"
 def predict_one_frame(frame):
-    pillars = np.fromfile(os.path.join(datapath, "pillars", frame))
-    gt = np.fromfile(os.path.join(datapath, "gt", frame))
+    with open(os.path.join(data_path,"pillars",f),"rb") as fin:
+        pillars, coord = pickle.load(fin)  #1600,10,9; 1600,2
+        
+        pillars = pillars[:,:,3:]
+        pillar_image = np.zeros([PILLAR_IMAGE_HEIGHT,PILLAR_IMAGE_WIDTH,10,6],dtype=np.float64)
 
-    pillars = pillars.reshape((H,W,P,D))
-    pillars = pillars[np.newaxis, :,:,:,3:]
-    print("pillars shape", pillars.shape)
-    #gt = gt.reshape((1,H,W,-1))
-    #print("gt shape", gt.shape)
-    #gt = gt[:,:,[1]]
-
-    pred = model.predict(pillars)
+        coord = coord.astype(np.int64)
+        for i in range(coord.shape[0]):
+            x,y = coord[i]
+            if x>=0 and x < PILLAR_IMAGE_HEIGHT and y>=0 and y<PILLAR_IMAGE_WIDTH:
+                pillar_image[coord[i,0],coord[i,1]] = pillars[i]
+            else:
+                print("out of range", x, y)
+                
+    
+    pillar_image = np.expand_dims(pillar_image, 0)
+    pred = model.predict(pillar_image)
     pred = pred.astype(np.float64)
 
     
@@ -88,7 +96,7 @@ def predict_one_frame(frame):
             return {
                 "probability": box[0],
                 "obj_type": kitti_cls_name[int(box[1])],
-                "obj_id":"",
+                "obj_id":box[0],
                 "psr":{
                     "position": {
                         "x": box[2],
@@ -119,7 +127,7 @@ def predict_one_frame(frame):
 
 frames = os.listdir(os.path.join(datapath, "pillars"))
 frames.sort()
-for f in frames[6000:6100]:
+for f in frames[6000:]:
     predict_one_frame(f)
 
 
