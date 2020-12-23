@@ -19,7 +19,7 @@ file_writer = tf.summary.create_file_writer(log_dir)
 file_writer.set_as_default()
 
 
-model = M.get_model(CLASS_NUM, [MAX_PILLAR_NUM, PILLAR_IMAGE_HEIGHT, PILLAR_IMAGE_WIDTH, MIN_POINTS, POINT_FEATURE_LENGTH-3], True)
+model = M.get_model(CLASS_NUM, [MAX_PILLAR_NUM, PILLAR_IMAGE_HEIGHT, PILLAR_IMAGE_WIDTH, MIN_POINTS, POINT_FEATURE_LENGTH-2], True)
 
 train_data, eval_data = dataset.get_dataset()
 train_data = train_data.batch(2)

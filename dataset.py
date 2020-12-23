@@ -28,8 +28,8 @@ def get_dataset():
         with open(os.path.join(data_path,"pillars",f),"rb") as fin:
             pillars, coord = pickle.load(fin)  #1600,10,9; 1600,2
             
-            pillars = pillars[:,:,3:]
-            pillar_image = np.zeros([PILLAR_IMAGE_HEIGHT,PILLAR_IMAGE_WIDTH,10,6],dtype=np.float64)
+            pillars = pillars[:,:,2:]
+            pillar_image = np.zeros([PILLAR_IMAGE_HEIGHT,PILLAR_IMAGE_WIDTH,MIN_POINTS_PER_PILLAR,POINT_FEATURE_LENGTH-2],dtype=np.float64)
 
             coord = coord.astype(np.int64)
             for i in range(coord.shape[0]):
@@ -49,7 +49,7 @@ def get_dataset():
     def tf_load_frame(idx):
         [pillars, gt] = tf.py_function(load_frame, [idx], [tf.float32,tf.float32])
         
-        pillars.set_shape([PILLAR_IMAGE_HEIGHT,PILLAR_IMAGE_WIDTH,10,6])
+        pillars.set_shape([PILLAR_IMAGE_HEIGHT,PILLAR_IMAGE_WIDTH,10,7])
         #coord.set_shape([1600,2])
         gt.set_shape([PILLAR_IMAGE_HEIGHT,PILLAR_IMAGE_WIDTH,CLASS_NUM+9])
 

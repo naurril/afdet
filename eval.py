@@ -23,7 +23,7 @@ file_writer.set_as_default()
 
 
 
-model = M.get_model(CLASS_NUM, [MAX_PILLAR_NUM, PILLAR_IMAGE_HEIGHT, PILLAR_IMAGE_WIDTH, MIN_POINTS, POINT_FEATURE_LENGTH-3], True)
+model = M.get_model(CLASS_NUM, [MAX_PILLAR_NUM, PILLAR_IMAGE_HEIGHT, PILLAR_IMAGE_WIDTH, MIN_POINTS, POINT_FEATURE_LENGTH-2], True)
 model.load_weights("models/afnet_weights.h5")
 # model_file = "models/feature_no_point_coord/afnet.h5"
 # model = tf.keras.models.load_model(model_file)
@@ -43,8 +43,8 @@ def predict_one_frame(frame):
     with open(os.path.join(data_path,"pillars",f),"rb") as fin:
         pillars, coord = pickle.load(fin)  #1600,10,9; 1600,2
         
-        pillars = pillars[:,:,3:]
-        pillar_image = np.zeros([PILLAR_IMAGE_HEIGHT,PILLAR_IMAGE_WIDTH,10,6],dtype=np.float64)
+        pillars = pillars[:,:,2:]
+        pillar_image = np.zeros([PILLAR_IMAGE_HEIGHT,PILLAR_IMAGE_WIDTH,MIN_POINTS_PER_PILLAR,POINT_FEATURE_LENGTH-2],dtype=np.float64)
 
         coord = coord.astype(np.int64)
         for i in range(coord.shape[0]):
@@ -80,7 +80,7 @@ def predict_one_frame(frame):
                 for c in range(shape[3]):
                     if keep[n,h,w,c]:
                         prob = heatmap[n, h, w, c]
-                        if (prob > 0.6):
+                        if (prob > 0.5):
                             print(n,h,w,c,PILLAR_SIZE_X,PILLAR_SIZE_Y, offset[n,h,w])
                             box = [prob, c, (h - offset[n,h,w,0])*PILLAR_SIZE_X, (w-offset[n,h,w,1]-shape[2]/2)*PILLAR_SIZE_Y, z[n,h,w,0],
                                     size[n,h,w,0], size[n,h,w,1], size[n,h,w,2],
