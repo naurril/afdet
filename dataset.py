@@ -29,6 +29,8 @@ def get_dataset():
             pillars, coord = pickle.load(fin)  #1600,10,9; 1600,2
             
             pillars = pillars[:,:,2:]
+            #pillars[:,:,0] = pillars[:,:,0] + 0.1
+            #pillars[:,:,1] = pillars[:,:,1]/200.0  
             pillar_image = np.zeros([PILLAR_IMAGE_HEIGHT,PILLAR_IMAGE_WIDTH,MIN_POINTS_PER_PILLAR,POINT_FEATURE_LENGTH-2],dtype=np.float64)
 
             coord = coord.astype(np.int64)

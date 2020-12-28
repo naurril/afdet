@@ -70,6 +70,9 @@ class SaveCallback(tf.keras.callbacks.Callback):
 
 #tf.summary.experimental.set_step(0)
 #model.fit(train_data, validation_data=train_data , epochs=250, callbacks=[tensorboard_callback, lr_callback, SaveCallback()])
+
+#model.load_weights("models/afnet_weights.h5")
+
 model.fit(train_data,     
           validation_data=eval_data, 
           epochs=20, callbacks=[tensorboard_callback, lr_callback, SaveCallback(), StepCallback()])

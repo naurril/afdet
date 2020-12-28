@@ -273,7 +273,7 @@ class SustechScapesDataset:
                     files = os.listdir(cam_file)
                     if len(files)>=2:
                         _,camera_ext = os.path.splitext(files[0])
-                        if calib_camera[c]:
+                        if calib_camera.get(c): #calib_camera[c]:
                             tempimg = cv2.imread(os.path.join(scene_dir, "camera",c,files[0]))
                             calib_camera[c]["image_dimension"] = tempimg.shape
 

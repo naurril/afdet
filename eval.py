@@ -8,28 +8,12 @@ import math
 import json
 import pickle
 
-model_file = "afnet.h5"
-weights_file = "afnet_weights.h5"
 
 from config import *
 
-tf.random.set_seed(0)
-
-
-log_dir = "logs/eval/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
-file_writer = tf.summary.create_file_writer(log_dir)
-file_writer.set_as_default()
-
-
-
 model = M.get_model(CLASS_NUM, [MAX_PILLAR_NUM, PILLAR_IMAGE_HEIGHT, PILLAR_IMAGE_WIDTH, MIN_POINTS, POINT_FEATURE_LENGTH-2], True)
 model.load_weights("models/afnet_weights.h5")
-# model_file = "models/feature_no_point_coord/afnet.h5"
-# model = tf.keras.models.load_model(model_file)
-model.summary()
 
-datapath = "./data/kitti"
 
 kitti_cls_name=[
         "Car",
@@ -37,13 +21,20 @@ kitti_cls_name=[
         "Cyclist",
         ]
 
+# labelpath= "/home/lie/fast/code/SUSTechPoints-be/data/2020-06-28-14-21-56/label"
+# datapath = "./data/2020-06-28-14-21-56-afdet"
 
-data_path = "./data/kitti-afdet"
+labelpath= "/home/lie/fast/code/SUSTechPoints-be/data/sustechscapes-mini-dataset-test/label"
+datapath = "./data/sustechscapes-mini-dataset-afdet"
+
+
 def predict_one_frame(frame):
-    with open(os.path.join(data_path,"pillars",f),"rb") as fin:
+    with open(os.path.join(datapath,"pillars",f),"rb") as fin:
         pillars, coord = pickle.load(fin)  #1600,10,9; 1600,2
         
         pillars = pillars[:,:,2:]
+        pillars[:,:,0] = pillars[:,:,0] + 0.1
+        pillars[:,:,1] = pillars[:,:,1]/200.0
         pillar_image = np.zeros([PILLAR_IMAGE_HEIGHT,PILLAR_IMAGE_WIDTH,MIN_POINTS_PER_PILLAR,POINT_FEATURE_LENGTH-2],dtype=np.float64)
 
         coord = coord.astype(np.int64)
@@ -59,6 +50,9 @@ def predict_one_frame(frame):
     pred = model.predict(pillar_image)
     pred = pred.astype(np.float64)
 
+    # gt = np.fromfile(os.path.join(datapath, "gt", f))
+    # gt = np.reshape(gt, [PILLAR_IMAGE_HEIGHT,PILLAR_IMAGE_WIDTH,CLASS_NUM+9]) #ind, heatmap, offset, z, size, angle
+    # pred = np.expand_dims(gt[:,:,1:],0)  #gt contains indicator, where pred doesn't
     
     heatmap = pred[:,:,:,            0:CLASS_NUM]
     offset =  pred[:,:,:,    CLASS_NUM:(CLASS_NUM+2)]
@@ -80,9 +74,9 @@ def predict_one_frame(frame):
                 for c in range(shape[3]):
                     if keep[n,h,w,c]:
                         prob = heatmap[n, h, w, c]
-                        if (prob > 0.5):
+                        if (prob > 0.3):
                             print(n,h,w,c,PILLAR_SIZE_X,PILLAR_SIZE_Y, offset[n,h,w])
-                            box = [prob, c, (h - offset[n,h,w,0])*PILLAR_SIZE_X, (w-offset[n,h,w,1]-shape[2]/2)*PILLAR_SIZE_Y, z[n,h,w,0],
+                            box = [prob, c, (h - offset[n,h,w,0]-shape[1]/2)*PILLAR_SIZE_X, (w-offset[n,h,w,1]-shape[2]/2)*PILLAR_SIZE_Y, z[n,h,w,0],
                                     size[n,h,w,0], size[n,h,w,1], size[n,h,w,2],
                                     math.atan2(angle[n,h,w,1],angle[n,h,w,0]),
                                 ]
@@ -119,7 +113,7 @@ def predict_one_frame(frame):
 
     labels = list(map(box_to_label, boxes))
 
-    fpath="/home/lie/fast/code/SUSTechPoints-be/data/afdet-pred/label/{}.json".format(frame)
+    fpath=f"{labelpath}/{frame}.json"
     print("writing", fpath)
     with open(fpath, "w") as fout:
         json.dump(labels, fout)
@@ -127,7 +121,7 @@ def predict_one_frame(frame):
 
 frames = os.listdir(os.path.join(datapath, "pillars"))
 frames.sort()
-for f in frames[6000:]:
+for f in frames:
     predict_one_frame(f)
 
 

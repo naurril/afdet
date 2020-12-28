@@ -32,7 +32,7 @@ def backbone(x, is_training):
 
     x = conv2d(x, 64, (3,3), (2,2), is_training)
     for _ in range(7):
-        x = conv2d(x, 32, (3,3), (1,1), is_training)
+        x = conv2d(x, 64, (3,3), (1,1), is_training)
     #
     x = tf.keras.layers.Conv2DTranspose(64, (2,2),(2,2))(x)
     x = tf.keras.layers.BatchNormalization(momentum=0.9)(x, is_training)
@@ -198,7 +198,7 @@ class TfnetLoss(tf.keras.losses.Loss):
         tf.summary.scalar("loss_angle", loss_angle)
         
 
-        return 0.5*loss_heatmap + loss_offset + loss_z + loss_size + loss_angle
+        return 0.3*loss_heatmap + loss_offset + loss_z*2 + loss_size + loss_angle
 
 
 class AfdetModel(tf.keras.Model):
