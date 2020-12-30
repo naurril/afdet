@@ -198,7 +198,7 @@ class TfnetLoss(tf.keras.losses.Loss):
         tf.summary.scalar("loss_angle", loss_angle)
         
 
-        return 0.3*loss_heatmap + loss_offset + loss_z*2 + loss_size + loss_angle
+        return loss_heatmap + loss_offset + loss_z + loss_size + loss_angle
 
 
 class AfdetModel(tf.keras.Model):

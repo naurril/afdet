@@ -4,7 +4,7 @@ import os
 from config import *
 import pickle
 
-data_path = "./data/kitti-afdet"
+data_path = "./data/kitti/kitti-afdet"
 
 def get_dataset():
 

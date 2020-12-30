@@ -238,20 +238,28 @@ def build_gt_file(d,f,save_path):
     return gt
 
 
-def prepare_raw_data(func):
+def prepare_raw_data(func, frames, split_name):
     sustechscapes_root_dir = "/home/lie/fast/code/SUSTechPoints-be/data"
-    save_path = "./data/kitti-afdet"
+    save_path = f"./data/kitti/kitti-afdet/{split_name}"
+
+    if not os.path.exists(save_path):
+        os.mkdir(save_path)
+        os.mkdir(os.path.join(save_path, "pillars"))
+        os.mkdir(os.path.join(save_path, "gt"))
 
     d = SustechScapesDataset(sustechscapes_root_dir, ["kitti"])
     scene = d.get_scene("kitti")
     
-    for f in scene["frames"]:
+    for f in frames: #scene["frames"]:
         func(d,f,save_path)
 
 if __name__ == "__main__":
     
-    prepare_raw_data(build_pillar_image)
-    prepare_raw_data(build_gt_file)
+    for split in ["train", "val"]:
+      with open(f"./data/kitti/split/{split}.txt") as f:
+        frames = map(lambda x: x.strip(), f.readlines())
+        prepare_raw_data(build_pillar_image, frames, split)
+        prepare_raw_data(build_gt_file, frames, split)
 
     #test()
 
